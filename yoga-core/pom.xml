@@ -5,12 +5,12 @@
     <parent>
         <groupId>org.skyscreamer</groupId>
         <artifactId>yoga</artifactId>
-        <version>0.9.1-SNAPSHOT</version>
+        <version>1.0.6-SNAPSHOT</version>
     </parent>
 
     <groupId>org.skyscreamer</groupId>
     <artifactId>yoga-core</artifactId>
-    <version>0.9.1-SNAPSHOT</version>
+    <version>1.0.6-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Yoga Core</name>
@@ -18,16 +18,6 @@
     <url>http://github.com/skyscreamer/yoga</url>
 
     <dependencies>
-        <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-            <version>1.5.5</version>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
-            <version>1.5.5</version>
-        </dependency>
         <dependency>
             <groupId>commons-beanutils</groupId>
             <artifactId>commons-beanutils</artifactId>
@@ -39,11 +29,10 @@
             <version>1.6.1</version>
         </dependency>
         <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-core</artifactId>
-            <version>3.0.5.RELEASE</version>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+            <version>1.7</version>
         </dependency>
-
         <dependency>
           <groupId>junit</groupId>
           <artifactId>junit</artifactId>
@@ -56,5 +45,17 @@
             <version>2.5</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-mapper-asl</artifactId>
+            <version>${jackson.version}</version>
+			<optional>true</optional>
+        </dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>${jackson2.version}</version>
+			<optional>true</optional>
+		</dependency>
     </dependencies>
 </project>

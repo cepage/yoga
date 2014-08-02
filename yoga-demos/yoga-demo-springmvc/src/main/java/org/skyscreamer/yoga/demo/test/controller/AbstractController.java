@@ -1,5 +1,9 @@
 package org.skyscreamer.yoga.demo.test.controller;
 
+import static org.skyscreamer.yoga.demo.util.TypeUtils.returnedClass;
+
+import java.util.List;
+
 import org.hibernate.ObjectNotFoundException;
 import org.skyscreamer.yoga.demo.dao.GenericDao;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,32 +13,33 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
-import java.lang.reflect.ParameterizedType;
-
 /**
- * Created by IntelliJ IDEA.
- * User: Carter Page
+ * Created by IntelliJ IDEA. User: Carter Page
  */
-public abstract class AbstractController<T> {
+public abstract class AbstractController<T>
+{
     @Autowired
     GenericDao _genericDao;
 
-    Class<T> _entityClass = returnedClass();
+    Class<T> _entityClass = returnedClass( getClass() );
 
     @RequestMapping("/{id}")
-    public T get(@PathVariable long id) {
-        return _genericDao.find(_entityClass, id);
+//    @ResponseBody
+    public T get( @PathVariable long id )
+    {
+        return _genericDao.find( _entityClass, id );
     }
 
-    // http://blog.xebia.com/2009/02/acessing-generic-types-at-runtime-in-java/
-    @SuppressWarnings("unchecked")
-    private Class<T> returnedClass() {
-        ParameterizedType parameterizedType = (ParameterizedType) getClass().getGenericSuperclass();
-        return (Class<T>) parameterizedType.getActualTypeArguments()[0];
+    @RequestMapping
+//    @ResponseBody
+    public List<T> getAll()
+    {
+        return _genericDao.findAll(_entityClass);
     }
 
     @ExceptionHandler(ObjectNotFoundException.class)
     @ResponseStatus(value = HttpStatus.NOT_FOUND, reason = "No such resource")
-    public void notFound() {
+    public void notFound()
+    {
     }
 }

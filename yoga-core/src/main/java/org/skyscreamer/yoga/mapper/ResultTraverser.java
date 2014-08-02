@@ -1,242 +1,160 @@
 package org.skyscreamer.yoga.mapper;
 
-import static org.skyscreamer.yoga.populator.FieldPopulatorUtil.getPopulatorExtraFieldMethods;
+import static org.skyscreamer.yoga.util.ObjectUtil.isPrimitive;
 
-import java.beans.PropertyDescriptor;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.io.IOException;
+import java.util.Map;
 
-import org.apache.commons.beanutils.PropertyUtils;
-import org.skyscreamer.yoga.mapper.enrich.Enricher;
-import org.skyscreamer.yoga.mapper.enrich.HrefEnricher;
-import org.skyscreamer.yoga.mapper.enrich.ModelDefinitionBuilder;
-import org.skyscreamer.yoga.mapper.enrich.NavigationLinksEnricher;
-import org.skyscreamer.yoga.metadata.PropertyUtil;
-import org.skyscreamer.yoga.populator.DefaultFieldPopulatorRegistry;
-import org.skyscreamer.yoga.populator.ExtraField;
-import org.skyscreamer.yoga.populator.FieldPopulator;
-import org.skyscreamer.yoga.populator.FieldPopulatorRegistry;
+import org.skyscreamer.yoga.model.HierarchicalModel;
+import org.skyscreamer.yoga.model.ListHierarchicalModel;
+import org.skyscreamer.yoga.model.MapHierarchicalModel;
+import org.skyscreamer.yoga.selector.Property;
 import org.skyscreamer.yoga.selector.Selector;
+import org.skyscreamer.yoga.util.ClassFinderStrategy;
+import org.skyscreamer.yoga.util.DefaultClassFinderStrategy;
 
 /**
- * Created by IntelliJ IDEA. User: corby
+ * ResultTraverser 
+ * @author solomon.duskis
+ *
  */
+
 public class ResultTraverser
 {
-   private int _maxEntities = -1;
-   private FieldPopulatorRegistry _fieldPopulatorRegistry = new DefaultFieldPopulatorRegistry(
-         new ArrayList<FieldPopulator<?>>() );
-   private List<Enricher> _enrichers = Arrays.asList(new HrefEnricher(), new ModelDefinitionBuilder(), new NavigationLinksEnricher());
-   private ClassFinderStrategy _classFinderStrategy = new ClassFinderStrategy()
-   {
-      public Class<?> findClass(Object instance)
-      {
-         return instance.getClass();
-      }
-   };
+    protected ClassFinderStrategy _classFinderStrategy = new DefaultClassFinderStrategy();
 
-   public void traverse(Object instance, Selector fieldSelector, HierarchicalModel model,
-         ResultTraverserContext context)
-   {
-      if (_maxEntities > -1) {
-          model = new ObservedHierarchicalModel(model, new HierarchicalModelEntityCounter(context, _maxEntities));
-      }
-      Class<?> instanceType = findClass( instance );
-      addExtraInfo( instance, fieldSelector, model, instanceType, context );
-      addProperties( instance, fieldSelector, model, instanceType, context );
-   }
-
-   @SuppressWarnings("unchecked")
-   protected <T> void addExtraInfo(Object instance, Selector fieldSelector,
-         HierarchicalModel model, Class<T> instanceType, ResultTraverserContext context)
-   {
-	   FieldPopulator<T> populator = (FieldPopulator<T>) _fieldPopulatorRegistry.getFieldPopulator( instanceType );
-
-      for (Enricher enricher : _enrichers)
-      {
-         enricher.enrich(instance, fieldSelector, model, instanceType, populator, context);
-      }
-      
-      addAnnotatedExtraFields( fieldSelector, model, populator, instance, instanceType, context );
-   }
-
-   private void addAnnotatedExtraFields(Selector fieldSelector, HierarchicalModel model,
-         FieldPopulator<?> populator, Object instance, Class<?> instanceType,
-         ResultTraverserContext context)
-   {
-      for (Method method : getPopulatorExtraFieldMethods( populator, instanceType ))
-      {
-         ExtraField extraField = method.getAnnotation( ExtraField.class );
-         if (fieldSelector.containsField( extraField.value() ))
-         {
-            Object fieldValue;
-            try
+    public void traverse( Object instance, Selector selector, HierarchicalModel<?> model,
+            YogaRequestContext context ) throws IOException
+    {
+        if (instance != null)
+        {
+            if (instance instanceof Iterable)
             {
-               if (method.getParameterTypes().length == 0)
-               {
-                  fieldValue = method.invoke( populator );
-               }
-               else
-               {
-                  fieldValue = method.invoke( populator, instance );
-               }
+                traverseIterable( (Iterable<?>) instance, selector, (ListHierarchicalModel<?>) model, context );
             }
-            catch (Exception e)
+            else if (instance instanceof Map)
             {
-               continue;
-            }
-
-            Selector childSelector = fieldSelector.getField( extraField.value() );
-            if (isPrimitive( fieldValue.getClass() ))
-            {
-               if (fieldValue != null)
-               {
-                  model.addSimple( extraField.value(), fieldValue );
-               }
-            }
-            else if (Iterable.class.isAssignableFrom( fieldValue.getClass() ))
-            {
-               traverseIterable( childSelector, model, extraField.value(),
-                     (Iterable<?>) fieldValue, context );
+                traverseMap( (Map<?,?>) instance, selector, (MapHierarchicalModel<?>) model, context );
             }
             else
             {
-               traverseChild( childSelector, model, extraField.value(), fieldValue, context );
+                traversePojo( instance, selector, (MapHierarchicalModel<?>) model, context );
             }
-         }
-      }
-   }
-
-   protected void addProperties(Object instance, Selector fieldSelector,
-         HierarchicalModel model, Class<?> instanceType, ResultTraverserContext context)
-   {
-      FieldPopulator<?> fieldPopulator = _fieldPopulatorRegistry.getFieldPopulator( instanceType );
-      for (PropertyDescriptor property : PropertyUtil.getReadableProperties(instanceType))
-      {
-         try
-         {
-            boolean containsField = fieldSelector.containsField( property, fieldPopulator );
-            if (containsField)
-            {
-               Object value = PropertyUtils.getNestedProperty( instance, property.getName() );
-
-               Class<?> propertyType = property.getPropertyType();
-               if (isPrimitive( propertyType ))
-               {
-                  if (value != null)
-                  {
-                     model.addSimple( property, value );
-                  }
-               }
-               else if (Iterable.class.isAssignableFrom( propertyType ))
-               {
-                  traverseIterable( fieldSelector, model, property, (Iterable<?>) value, context );
-               }
-               else
-               {
-                  traverseChild( fieldSelector, model, property, value, context );
-               }
-            }
-         }
-         catch (Exception e)
-         {
-            throw new RuntimeException( e );
-         }
-      }
-   }
-
-   private void traverseIterable(Selector fieldSelector, HierarchicalModel model,
-         PropertyDescriptor property, Iterable<?> list, ResultTraverserContext context)
-   {
-      if (list == null)
-      {
-         return;
-      }
-      HierarchicalModel listModel = model.createList( property );
-      for (Object o : list)
-      {
-         Class<?> type = findClass( o );
-         if (isPrimitive( type ))
-         {
-            listModel.addSimple( property, list );
-         }
-         else
-         {
-            traverseChild( fieldSelector, listModel, property, o, context );
-         }
-      }
-   }
-
-   private void traverseIterable(Selector fieldSelector, HierarchicalModel model, String property,
-         Iterable<?> list, ResultTraverserContext context)
-   {
-      if (list == null)
-      {
-         return;
-      }
-      HierarchicalModel listModel = model.createList( property );
-      for (Object o : list)
-      {
-         Class<?> type = findClass( o );
-         if (isPrimitive( type ))
-         {
-            listModel.addSimple( property, list );
-         }
-         else
-         {
-            traverseChild( fieldSelector, listModel, property, o, context );
-         }
-      }
-   }
-
-   private void traverseChild(Selector parentSelector, HierarchicalModel parent,
-         PropertyDescriptor property, Object value, ResultTraverserContext context)
-   {
-      traverse( value, parentSelector.getField( property ), parent.createChild( property ),
-            context );
-   }
-
-   private void traverseChild(Selector parentSelector, HierarchicalModel parent, String property,
-         Object value, ResultTraverserContext context)
-   {
-      traverse( value, parentSelector.getField( property ), parent.createChild( property ),
-            context );
-   }
-
-   public Class<?> findClass(Object instance)
-   {
-      return _classFinderStrategy.findClass( instance );
-   }
-
-   public static boolean isPrimitive(Class<?> clazz)
-   {
-      return clazz.isPrimitive() || clazz.isEnum() || Number.class.isAssignableFrom( clazz )
-            || String.class.isAssignableFrom( clazz ) || Boolean.class.isAssignableFrom( clazz )
-            || Character.class.isAssignableFrom( clazz );
-   }
-
-   public void setFieldPopulatorRegistry(FieldPopulatorRegistry fieldPopulatorRegistry)
-   {
-      _fieldPopulatorRegistry = fieldPopulatorRegistry;
-   }
-
-   public void setClassFinderStrategy(ClassFinderStrategy classFinderStrategy)
-   {
-      _classFinderStrategy = classFinderStrategy;
-   }
-
-   public void setEnrichers(List<Enricher> enrichers)
-   {
-      this._enrichers = enrichers;
-   }
-
-    public int getMaxEntities() {
-        return _maxEntities;
+        } 
+        else 
+        {
+        	model.finished();
+        }
+    }
+    
+    private <T> void addField(Selector selector, MapHierarchicalModel<?> model,
+            YogaRequestContext context, Class<T> instanceType,
+            boolean isPrimitive, Object value, String fieldName)
+            throws IOException
+    {
+        if ( isPrimitive )
+        {
+            model.addProperty( fieldName, value );
+            return;
+        }
+        
+        Selector childSelector = selector.getChildSelector( instanceType, fieldName );
+        if ( value instanceof Iterable )
+        {
+            traverseIterable( ( Iterable<?> ) value, childSelector,
+                    model.createChildList( fieldName ), context );
+        }
+        else if ( value instanceof Map )
+        {
+            traverseMap( ( Map<?, ?> ) value, childSelector,
+                    model.createChildMap( fieldName ), context );
+        }
+        else
+        {
+            traversePojo( value, childSelector,
+                    model.createChildMap( fieldName ), context );
+        }
     }
 
-    public void setMaxEntities(int _maxEntities) {
-        this._maxEntities = _maxEntities;
+
+    public void traverseIterable( Iterable<?> iterable, Selector selector,
+            ListHierarchicalModel<?> model, YogaRequestContext context ) throws IOException
+    {
+        if ( iterable != null )
+        {
+            for ( Object child : iterable )
+            {
+                if (child == null || isPrimitive( child.getClass() ))
+                {
+                    model.addValue( child );
+                }
+                else if ( child instanceof Map )
+                {
+                    traverseMap( ( Map<?, ?> ) child, selector, model.createChildMap(), context );
+                }
+                else
+                {
+                    traversePojo( child, selector, model.createChildMap(), context );
+                }
+            }
+            context.emitEvent( model, iterable, context, selector );
+        }
+        model.finished();
+    }
+
+    private void traverseMap(Map<?, ?> map, Selector selector, MapHierarchicalModel<?> model,
+        YogaRequestContext context) throws IOException
+    {
+        if ( map != null )
+        {
+            for ( Map.Entry<?, ?> entry : map.entrySet() )
+            {
+                String fieldName = entry.getKey().toString();
+                if ( selector.containsField( Map.class, fieldName ) )
+                {
+                    Object value = entry.getValue();
+                    if ( value != null )
+                    {
+                        addField( selector, model, context, Map.class,
+                                isPrimitive( value.getClass() ), value,
+                                fieldName );
+                    }
+                }
+            }
+            context.emitEvent( model, map, context, selector );
+        }
+        model.finished();
+    }
+
+    public <T> void traversePojo( T instance, Selector selector, MapHierarchicalModel<?> model,
+            YogaRequestContext context ) throws IOException
+    {
+        if ( instance != null )
+        {
+            Class<T> instanceType = _classFinderStrategy.findClass( instance );
+            for (Property<T> property : selector.getSelectedFields( instanceType ))
+            {
+                Object value = property.getValue( instance );
+                if ( value != null )
+                {
+                    addField( selector, model, context, instanceType,
+                            property.isPrimitive(), value, property.name() );
+                }
+            }
+            context.emitEvent( model, instance, instanceType, context, selector );
+        }
+        model.finished();
+    }
+
+    // GETTERS / SETTERS
+    public void setClassFinderStrategy( ClassFinderStrategy classFinderStrategy )
+    {
+        this._classFinderStrategy = classFinderStrategy;
+    }
+
+    public ClassFinderStrategy getClassFinderStrategy()
+    {
+        return _classFinderStrategy;
     }
 }
+
